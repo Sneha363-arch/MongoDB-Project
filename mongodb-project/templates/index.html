@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Student Analytics Dashboard</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+        }
+
+        header {
+            color: white;
+            text-align: center;
+            padding: 20px;
+            font-size: 26px;
+            font-weight: bold;
+        }
+
+        .container {
+            padding: 20px;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #36d1dc, #5b86e5);
+            color: white;
+            font-weight: 500;
+            cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0px 4px 10px rgba(0,0,0,0.2);
+        }
+
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0px 6px 15px rgba(0,0,0,0.3);
+        }
+
+        input, select {
+            padding: 8px;
+            border-radius: 6px;
+            border: none;
+            outline: none;
+        }
+
+        .card {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0px 4px 12px rgba(0,0,0,0.2);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            text-align: center;
+        }
+
+        th {
+            background: #f0f0f0;
+        }
+
+        tr:hover {
+            background: #f9f9f9;
+        }
+
+        #loader {
+            display: none;
+            color: white;
+            text-align: center;
+            font-size: 18px;
+        }
+
+        .charts {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        canvas {
+            max-width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+
+<header>📊 Student Analytics Dashboard (MongoDB)</header>
+
+<div class="container">
+
+    <div class="controls">
+        <button onclick="getStudents()">All Students</button>
+        <button onclick="getTop()">Top 5</button>
+        <button onclick="loadCharts()">Show Charts</button>
+        <button onclick="getDept()">Dept Count</button>
+
+        <input id="searchName" placeholder="Search Name">
+        <button onclick="search()">Search</button>
+
+        <select id="gradeFilter">
+            <option value="">Grade</option>
+            <option>A</option><option>B</option><option>C</option><option>D</option>
+        </select>
+        <button onclick="filter()">Filter</button>
+
+        <select id="sortOrder">
+            <option value="desc">Sort Desc</option>
+            <option value="asc">Sort Asc</option>
+        </select>
+        <button onclick="sortData()">Sort</button>
+    </div>
+
+    <div id="loader">Loading...</div>
+
+    <div class="card">
+        <table>
+            <thead id="thead"></thead>
+            <tbody id="tbody"></tbody>
+        </table>
+    </div>
+
+    <div class="charts">
+        <div class="card">
+            <h3>Average Marks (Bar Chart)</h3>
+            <canvas id="barChart"></canvas>
+        </div>
+
+        <div class="card">
+            <h3>Department Distribution (Pie Chart)</h3>
+            <canvas id="pieChart"></canvas>
+        </div>
+    </div>
+
+</div>
+
+<script>
+
+let barChart, pieChart;
+
+function showLoader(show) {
+    document.getElementById("loader").style.display = show ? "block" : "none";
+}
+
+function renderTable(data) {
+    const thead = document.getElementById("thead");
+    const tbody = document.getElementById("tbody");
+
+    thead.innerHTML = "";
+    tbody.innerHTML = "";
+
+    if (data.length === 0) return;
+
+    let headers = Object.keys(data[0]);
+
+    thead.innerHTML = "<tr>" + headers.map(h => `<th>${h}</th>`).join("") + "</tr>";
+
+    data.forEach(row => {
+        let tr = "<tr>";
+        headers.forEach(h => tr += `<td>${row[h]}</td>`);
+        tr += "</tr>";
+        tbody.innerHTML += tr;
+    });
+}
+
+function getStudents() {
+    showLoader(true);
+    fetch("/students")
+        .then(res => res.json())
+        .then(data => {
+            renderTable(data.data || data);
+            showLoader(false);
+        });
+}
+
+function getTop() {
+    fetch("/top")
+        .then(res => res.json())
+        .then(data => renderTable(data));
+}
+
+function getDept() {
+    fetch("/count-dept")
+        .then(res => res.json())
+        .then(data => renderTable(data));
+}
+
+function search() {
+    let name = document.getElementById("searchName").value;
+    fetch("/search/" + name)
+        .then(res => res.json())
+        .then(data => renderTable(data));
+}
+
+function filter() {
+    let g = document.getElementById("gradeFilter").value;
+    fetch("/filter/" + g)
+        .then(res => res.json())
+        .then(data => renderTable(data));
+}
+
+function sortData() {
+    let order = document.getElementById("sortOrder").value;
+    fetch("/sort/" + order)
+        .then(res => res.json())
+        .then(data => renderTable(data));
+}
+
+function loadCharts() {
+
+    // BAR CHART (avg by grade)
+    fetch("/avg")
+        .then(res => res.json())
+        .then(data => {
+            let labels = data.map(d => d._id);
+            let values = data.map(d => d.avg);
+
+            if (barChart) barChart.destroy();
+
+            barChart = new Chart(document.getElementById("barChart"), {
+                type: "bar",
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: "Average Marks",
+                        data: values,
+                        backgroundColor: "#36a2eb"
+                    }]
+                }
+            });
+        });
+
+    // PIE CHART (dept count)
+    fetch("/count-dept")
+        .then(res => res.json())
+        .then(data => {
+            let labels = data.map(d => d._id);
+            let values = data.map(d => d.count);
+
+            if (pieChart) pieChart.destroy();
+
+            pieChart = new Chart(document.getElementById("pieChart"), {
+                type: "pie",
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: ["#ff6384","#36a2eb","#ffcd56","#4bc0c0"]
+                    }]
+                }
+            });
+        });
+}
+
+</script>
+
+</body>
+</html>
